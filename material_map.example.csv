@@ -1,0 +1,5 @@
+revit_name,carbonspace_component_id,carbonspace_name,unit,quantity_basis,factor,group,note
+Basic Wall: WT.01a,80460,Project A WT.01a,m2,,,Facade opaque,Id normally comes from CS_ComponentId in Revit; this is a fallback
+Basic Wall: WT.02,80477,Project A WT.02,m2,,,Separating walls,group decides where the line goes in the calculation
+Basic Floor: Concrete slab 250,77248,Concrete 2% reinforcement,m3,,,Floors,unit m3 -> Volume column is used automatically
+Structural Framing: Steel UB,77244,Steel profile or sheet,kg,volume,7850,Beams,component in kg: use volume x density

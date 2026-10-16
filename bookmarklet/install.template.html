@@ -1,0 +1,112 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>CarbonSpace Sync · Unknown Works</title>
+<style>
+  :root { --ink:#1d2433; --muted:#5b6577; --line:#e6e9ef; --bg:#f6f7f9; --card:#fff; --accent:#1f9d55; --navy:#0b1f33; }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) { --ink:#e8ecf2; --muted:#a3adbd; --line:#2c3442; --bg:#12161d; --card:#1a2029; --navy:#0b1f33; }
+  }
+  * { box-sizing: border-box; }
+  body { margin:0; background:var(--bg); color:var(--ink); font:16px/1.55 system-ui,-apple-system,"Segoe UI",sans-serif; }
+  header { background:var(--navy); color:#fff; padding:28px 16px; }
+  header div, main { max-width:820px; margin:0 auto; }
+  header h1 { margin:0 0 6px; font-size:26px; }
+  header p { margin:0; color:#c9d6e3; }
+  header p.by { margin:-2px 0 10px; font-size:13px; letter-spacing:.06em; text-transform:uppercase; color:#9fb3c8; }
+  main { padding:24px 16px 60px; }
+  section { background:var(--card); border:1px solid var(--line); border-radius:12px; padding:20px 22px; margin:0 0 18px; }
+  h2 { margin:0 0 10px; font-size:19px; }
+  h2 span { display:inline-block; width:28px; height:28px; border-radius:50%; background:var(--accent); color:#fff; text-align:center; line-height:28px; font-size:15px; margin-right:8px; }
+  ol, ul { padding-left:22px; margin:8px 0; } li { margin:5px 0; }
+  .bm { display:inline-block; background:var(--accent); color:#fff; text-decoration:none; font-weight:700; padding:12px 20px; border-radius:10px; font-size:17px; cursor:grab; margin:8px 0; }
+  .muted { color:var(--muted); font-size:14px; }
+  code { background:var(--bg); border:1px solid var(--line); border-radius:5px; padding:1px 6px; font-size:14px; }
+  table { border-collapse:collapse; width:100%; font-size:14px; } td, th { border-bottom:1px solid var(--line); padding:6px 8px; text-align:left; }
+  .note { border-left:4px solid #e0a000; padding:8px 12px; background:rgba(224,160,0,.08); border-radius:4px; }
+  button { font:inherit; padding:6px 12px; border-radius:8px; border:1px solid var(--line); background:var(--card); color:var(--ink); cursor:pointer; }
+</style>
+</head>
+<body>
+<header><div>
+  <h1>CarbonSpace Sync</h1>
+  <p class="by">by Unknown Works</p>
+  <p>Send the areas and volumes from a Revit schedule straight into a CarbonSpace calculation. No typing them in by hand.</p>
+</div></header>
+<main>
+
+<section>
+  <h2><span>1</span>Install (once, about 30 seconds)</h2>
+  <ol>
+    <li>Show your bookmarks bar in Chrome or Edge: press <code>Ctrl + Shift + B</code>.</li>
+    <li><b>Drag this green button onto the bookmarks bar:</b><br>
+      <a class="bm" href="__HREF__" onclick="alert('Drag this button onto your bookmarks bar, then click it while you are on CarbonSpace.'); return false;">CarbonSpace Sync</a></li>
+  </ol>
+  <p class="muted">If dragging doesn't work: <button id="copy">Copy the bookmark code</button>, then right-click the bookmarks bar → <i>Add page…</i>, name it <i>CarbonSpace Sync</i>, and paste the code into the URL field.</p>
+  <p class="muted">The bookmark always loads the latest version of the tool, so you only install it once.</p>
+</section>
+
+<section>
+  <h2><span>2</span>In Revit: export the schedule</h2>
+  <ul>
+    <li>Your schedule needs the columns <b>Family and Type</b> and <b>Area</b> / <b>Volume</b> (Count is optional).</li>
+    <li>Export it: <i>File → Export → Reports → Schedule</i>, and keep the default <b>.txt</b> format.</li>
+    <li><b>Optional:</b> add a <b><code>CS_ComponentId</code></b> type parameter. When it is filled in, that number always wins. You can also leave it out and match types in the panel instead (see step 3).</li>
+  </ul>
+  <p class="note">The tool uses whichever measure the component is made for: <b>Area</b> for components per m², <b>Volume</b> for per m³, <b>Count</b> for per piece. You don't need to choose.</p>
+</section>
+
+<section>
+  <h2><span>3</span>Push to CarbonSpace</h2>
+  <ol>
+    <li>Log in at <a href="https://public.carbonspace.earth" target="_blank" rel="noopener">public.carbonspace.earth</a> and <b>open the calculation</b> you want to update.</li>
+    <li>Click <b>CarbonSpace Sync</b> in your bookmarks bar. A panel opens on the right.</li>
+    <li><b>Drag your exported schedule(s)</b> into the panel. You can drop walls, roofs and floors together.</li>
+    <li><b>Match types:</b> each Revit type has a dropdown of CarbonSpace components (UW Library and this project).
+      <ul>
+        <li><b>Components from:</b> pick the project's folder, e.g. <i>UW Library / UW Components / Project A</i>. Suggestions only come from that folder, so another project's <i>WT.01a</i> is never picked. A folder named like the CarbonSpace project is chosen automatically. Otherwise the panel remembers your last choice for that project.</li>
+        <li>The best matches by name are at the top (•). The tool reads type codes, so <i>uw01 300mm</i>, <i>UW-01 ext</i> and <i>UW.01</i> all match the component <i>UW.01</i>.</li>
+        <li>When exactly one component matches, it is picked for you (<i>name match</i>).</li>
+        <li>You only choose once. The calculation remembers each type after the push (<i>last push</i>), and so does your browser (<i>saved</i>). Next time, the new export is matched automatically, even if you renamed the type slightly.</li>
+        <li>Pick <i>— none (skip) —</i> for types that should not count.</li>
+      </ul></li>
+    <li>Check <b>What will change</b>, then click <b>Push to CarbonSpace</b>. Finally, click <i>Reload</i> to see the new result.</li>
+  </ol>
+  <p class="muted">Need the numbers in Revit too? Click <i>download this schedule with CS_ComponentId filled in</i> above the type table. You get the same file with the numbers added, to copy into the Revit parameter.</p>
+  <table>
+    <tr><th>In the preview</th><th>Meaning</th></tr>
+    <tr><td><b>UPDATE</b></td><td>The component is already in the calculation. Its quantity changes to the Revit value.</td></tr>
+    <tr><td><b>CREATE</b></td><td>New in this calculation. It is added to a group chosen from the schedule name (Wall → Facade opaque, Roof → Roofs …).</td></tr>
+    <tr><td><b>KEEP</b></td><td>Nothing changed since the last push.</td></tr>
+    <tr><td><b>STALE</b></td><td>Added by an earlier push, but no longer in Revit. Tick the box at the bottom to remove it.</td></tr>
+  </table>
+  <ul class="muted">
+    <li>Anything typed in by hand in CarbonSpace (foundations, services …) is never changed or deleted.</li>
+    <li>Types without a <code>CS_ComponentId</code> are listed in orange and skipped.</li>
+    <li>Before every push, the panel downloads a backup of the calculation (a <code>.json</code> file in your Downloads).</li>
+    <li>It uses your own CarbonSpace login. You can only change projects you have write access to.</li>
+  </ul>
+</section>
+
+<section>
+  <h2><span>?</span>Problems</h2>
+  <ul>
+    <li><b>Nothing happens when I click the bookmark</b>: make sure you're on public.carbonspace.earth and logged in, then reload the page and try again.</li>
+    <li><b>"401"</b>: your CarbonSpace session expired. Log out, log in again, and retry.</li>
+    <li><b>"does not exist or you have no access"</b>: the number in <code>CS_ComponentId</code> is wrong.</li>
+    <li><b>"is measured in kg"</b>: that component is per kg, which a schedule can't provide. Use a per m² or per m³ component instead.</li>
+  </ul>
+  <p class="muted">Developed by <b>Unknown Works</b> · built __BUILT__ · source: carbonspace-sync/bookmarklet/cs-sync.js</p>
+</section>
+</main>
+<script>
+  document.getElementById('copy').onclick = function () {
+    var href = document.querySelector('.bm').getAttribute('href');
+    navigator.clipboard.writeText(href).then(function () { alert('Copied. Now add a bookmark and paste this as its URL.'); },
+      function () { prompt('Copy this and paste it as the bookmark URL:', href); });
+  };
+</script>
+</body>
+</html>

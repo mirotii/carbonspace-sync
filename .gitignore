@@ -1,0 +1,16 @@
+# Secrets and local settings - never commit
+config.json
+*.key
+.env
+push-log.jsonl
+# Python
+__pycache__/
+*.pyc
+.pytest_cache/
+build/
+dist/
+*.spec
+
+# Local working files
+material_map.csv
+*.png

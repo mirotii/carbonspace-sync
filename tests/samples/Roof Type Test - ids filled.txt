@@ -1,0 +1,6 @@
+﻿"Roof Schedule 2"	""	""	""	""
+"CS_ComponentId"	"Family and Type"	"Area"	"Volume"	"Count"
+""	""	""	""	""
+""	"Basic Roof: Roof Model"	"380 m²"	"179.45 m³"	"6"
+""	"Basic Roof: Generic - 20mm Corrugated"	"135 m²"	"3.05 m³"	"4"
+""	"Basic Roof: Generic - 40mm"	"103 m²"	"4.39 m³"	"1"
