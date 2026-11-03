@@ -249,7 +249,8 @@
   // ---------------------------------------------------------------- planning
   // schedules: parsed schedules; components: {id: component}; calcSet: GetCalculationSetById.
   // A component already in the calculation is updated where it is (whatever its group);
-  // a new one goes into a group chosen from the schedule title.
+  // a new one goes into an existing group: opts.groupFor[componentId] if chosen, else where
+  // earlier pushes put the same kind of type, else a group named after the schedule.
   function buildPlan(schedules, components, calcSet, opts) {
     opts = opts || {};
     var groups = calcSet.CalculationGroups || [];
@@ -257,6 +258,39 @@
     var gname = {}; groups.forEach(function (g) { gname[g.Id] = (g.Name || '').trim(); });
     var isTagged = function (l) { return (l.Comment || '').indexOf(TAG) === 0; };
     var wanted = {}, order = [], missing = [], errors = [], warnings = [];
+    var family = function (n) { var i = n.indexOf(':'); return i > 0 ? n.slice(0, i).trim().toLowerCase() : ''; };
+
+    // Groups as "Parent / Child", in the calculation's own order (for the group picker).
+    var byId = {}; groups.forEach(function (g) { byId[g.Id] = g; });
+    var groupOptions = [];
+    (function walk(parent, prefix) {
+      groups.filter(function (g) { return (g.ParentId || null) === parent; })
+        .sort(function (a, b) { return (a.Ordinal || 0) - (b.Ordinal || 0) || String(a.Name).localeCompare(b.Name); })
+        .forEach(function (g) {
+          var path = prefix + (g.Name || '').trim();
+          groupOptions.push({ id: g.Id, path: path });
+          walk(g.Id, path + ' / ');
+        });
+    })(null, '');
+    var gpath = {}; groupOptions.forEach(function (o) { gpath[o.id] = o.path; });
+    var isLeaf = function (id) { return !groups.some(function (g) { return g.ParentId === id; }); };
+    function pickGroup(w) {
+      var chosen = (opts.groupFor || {})[w.id];
+      if (chosen && (byId[chosen] || String(chosen).indexOf('new:') === 0)) return chosen;
+      // 1. Where earlier pushes put the same kind of type (e.g. other "Basic Roof:" lines).
+      var fam = family(w.types[0] || '');
+      var prev = fam && lines.filter(function (l) {
+        return isTagged(l) && byId[l.CalculationGroupId] && (l.Comment || '').slice(TAG.length + 1).split(';').some(function (n) { return family(n.trim()) === fam; });
+      })[0];
+      if (prev) return prev.CalculationGroupId;
+      // 2. A group named after the schedule ("Roof Schedule" -> "Roofs"), deepest groups first.
+      var title = (w.title || '').toLowerCase();
+      var kw = GROUP_BY_SCHEDULE.filter(function (k) { return title.indexOf(k[0]) >= 0; }).map(function (k) { return k[0]; })[0];
+      var cands = groups.filter(function (g) { return normName(g.Name) === normName(w.group); })
+        .concat(kw ? groups.filter(function (g) { return normName(g.Name).indexOf(kw) >= 0; }) : []);
+      cands.sort(function (a, b) { return isLeaf(b.Id) - isLeaf(a.Id); });
+      return cands.length ? cands[0].Id : 'new:' + w.group;
+    }
 
     schedules.forEach(function (s) {
       s.warnings.forEach(function (w) { warnings.push(w); });
@@ -267,7 +301,7 @@
         var basis = BASIS_BY_UNIT[normUnit(comp.ComponentUnit)];
         if (!basis || basis === 'weight') { errors.push('"' + ty.name + '" -> ' + comp.Name + ' is measured in "' + (comp.ComponentUnit || '?') + '", which a schedule cannot provide.'); return; }
         var w = wanted[ty.id];
-        if (!w) { w = wanted[ty.id] = { id: ty.id, name: comp.Name, unit: comp.ComponentUnit, basis: basis, qty: 0, types: [], group: defaultGroup(s.title) }; order.push(w); }
+        if (!w) { w = wanted[ty.id] = { id: ty.id, name: comp.Name, unit: comp.ComponentUnit, basis: basis, qty: 0, types: [], group: defaultGroup(s.title), title: s.title }; order.push(w); }
         w.qty += ty[basis];
         w.types.push(ty.name);
         if (!ty[basis]) warnings.push('"' + ty.name + '": ' + basis + ' is 0 in the export.');
@@ -278,7 +312,9 @@
     order.forEach(function (w) {
       var cands = lines.filter(function (l) { return l.ComponentId === w.id && !used[l.Id]; });
       cands.sort(function (a, b) { return isTagged(b) - isTagged(a); });
-      var a = { kind: 'create', want: w, newExpr: fmt(w.qty), group: w.group };
+      var a = { kind: 'create', want: w, newExpr: fmt(w.qty) };
+      var g = pickGroup(w);
+      if (byId[g]) { a.groupId = g; a.group = gpath[g]; } else { a.newGroup = String(g).slice(4); a.group = a.newGroup + ' (new)'; }
       if (cands.length) {
         var l = cands[0]; used[l.Id] = true;
         a.line = l; a.oldExpr = l.Expression; a.group = gname[l.CalculationGroupId];
@@ -290,7 +326,6 @@
     });
     // Only lines from the same kind of schedule (e.g. "Basic Wall:") count as stale,
     // so pushing just the wall schedule never touches lines that came from roofs.
-    var family = function (n) { var i = n.indexOf(':'); return i > 0 ? n.slice(0, i).trim().toLowerCase() : ''; };
     var families = {};
     schedules.forEach(function (s) { s.types.forEach(function (t) { families[family(t.name)] = true; }); });
     var sameKind = function (l) {
@@ -301,7 +336,7 @@
         actions.push({ kind: opts.prune ? 'delete' : 'stale', line: l, oldExpr: l.Expression, group: gname[l.CalculationGroupId], want: { id: l.ComponentId, name: (components[l.ComponentId] || {}).Name || ('component ' + l.ComponentId), types: [(l.Comment || '').replace(TAG + ': ', '')], unit: (components[l.ComponentId] || {}).ComponentUnit } });
       }
     });
-    return { actions: actions, missing: missing, errors: errors, warnings: warnings };
+    return { actions: actions, missing: missing, errors: errors, warnings: warnings, groupOptions: groupOptions };
   }
 
   function comment(types) {
@@ -353,11 +388,11 @@
           return api('DELETE', '/api/CalculationGroupComponent/Delete/' + a.line.Id).then(function () { done.delete++; log('Removed ' + a.want.name); });
         }
         if (a.kind !== 'create') return;
-        var key = a.group.trim().toLowerCase();
-        var g = gid[key] ? Promise.resolve(gid[key]) : api('POST', '/api/CalculationGroup/Create', {
-          Id: 0, ObjectId: '00000000-0000-0000-0000-000000000000', CalculationId: cid, Name: a.group,
+        var name = a.newGroup || a.group, key = String(name).trim().toLowerCase();
+        var g = a.groupId ? Promise.resolve(a.groupId) : gid[key] ? Promise.resolve(gid[key]) : api('POST', '/api/CalculationGroup/Create', {
+          Id: 0, ObjectId: '00000000-0000-0000-0000-000000000000', CalculationId: cid, Name: name,
           ParentId: null, ReplacementFactor: 1, IsComparison: false, Ordinal: 99, ProjectId: pid
-        }).then(function (ng) { gid[key] = ng.Id; log('Added group ' + a.group); return ng.Id; });
+        }).then(function (ng) { gid[key] = ng.Id; log('Added group ' + name); return ng.Id; });
         return g.then(function (groupId) {
           return api('POST', '/api/CalculationGroupComponent/Create', {
             Id: 0, ObjectId: '00000000-0000-0000-0000-000000000000', Quantity: 0, Expression: a.newExpr,
@@ -421,7 +456,7 @@
     '#cs-sync-panel .delta{display:block;font-size:11px;color:#5b6577}#cs-sync-panel tr.dim td{color:#8a94a6}#cs-sync-panel tr.dim b{font-weight:500}' +
     '#cs-sync-panel tr.off td.n b,#cs-sync-panel tr.off td.n .delta{text-decoration:line-through}#cs-sync-panel tr.off .tag{opacity:.5}#cs-sync-panel input[data-act]{vertical-align:middle;margin:0 2px 0 0;cursor:pointer}'+
     '#cs-sync-panel tr.need td{background:#fff8ee}#cs-sync-panel tr.div td{padding:10px 6px 4px;font-size:11.5px;font-weight:600;text-transform:uppercase;letter-spacing:.04em;color:#5b6577;border-bottom:1px solid #c6ceda}#cs-sync-panel td{vertical-align:middle}' +
-    '#cs-sync-panel select{width:100%;max-width:300px;padding:4px 6px;border:1px solid #c6ceda;border-radius:6px;background:#fff;font:inherit;font-size:12.5px}' +
+    '#cs-sync-panel select.grp{max-width:190px}#cs-sync-panel select{width:100%;max-width:300px;padding:4px 6px;border:1px solid #c6ceda;border-radius:6px;background:#fff;font:inherit;font-size:12.5px}' +
     '#cs-sync-panel .file{display:flex;flex-wrap:wrap;gap:4px 10px;align-items:baseline;margin:10px 0 4px}#cs-sync-panel .file .links{margin-left:auto;font-size:12.5px}' +
     '#cs-sync-panel a{color:#0b1f33;font-weight:500;text-decoration:underline;text-underline-offset:2px}#cs-sync-panel input[type=checkbox]{accent-color:#0b1f33}#cs-sync-panel .drop.over{border-color:#0b1f33;background:#eef2f6}';
   var panel = document.createElement('div');
@@ -439,7 +474,7 @@
 
   var LIBRARY_PROJECTS = [1302]; // UW Library; the calculation's own project is added too
   var STORE = 'cs-sync-map-v1';
-  var state = { calcSet: null, schedules: [], components: {}, plan: null, library: [], chosen: {}, resolved: [], off: {} };
+  var state = { calcSet: null, schedules: [], components: {}, plan: null, library: [], chosen: {}, resolved: [], off: {}, groupFor: {} };
   var WRITES = { create: 1, update: 1, delete: 1 };
   var actKey = function (a) { return a.kind + ':' + a.want.id + ':' + (a.line ? a.line.Id : 'new'); };
   // Choices saved in this browser are kept per CarbonSpace project, so one project's
@@ -538,7 +573,7 @@
       var resolved = state.resolved = resolveIds(state.schedules, {
         chosen: state.chosen, remembered: rememberedFromCalc(state.calcSet), saved: loadSaved(), library: state.library
       });
-      var plan = state.plan = buildPlan(resolved, state.components, state.calcSet, { prune: $('cs-prune').checked });
+      var plan = state.plan = buildPlan(resolved, state.components, state.calcSet, { prune: $('cs-prune').checked, groupFor: state.groupFor });
       plan.actions.forEach(function (a) { a.off = !!(WRITES[a.kind] && state.off[actKey(a)]); });
       var count = function (k) { return plan.actions.filter(function (a) { return a.kind === k && !a.off; }).length; };
       var chip = function (cls, n, label) { return n ? '<span class="tag ' + cls + '">' + n + ' ' + label + '</span>' : ''; };
@@ -558,6 +593,13 @@
   }
 
   var ORDER = { update: 0, create: 1, delete: 2, stale: 3, keep: 4 };
+  // New lines: pick one of the calculation's groups (or make a new one).
+  function groupPicker(a, plan) {
+    return '<select data-group="' + a.want.id + '" class="grp">' + plan.groupOptions.map(function (o) {
+      return '<option value="' + o.id + '"' + (o.id === a.groupId ? ' selected' : '') + '>' + esc(o.path) + '</option>';
+    }).join('') + (a.newGroup ? '<option value="" selected>' + esc(a.newGroup) + ' (new)</option>' : '') +
+      '<option value="new">+ New group…</option></select>';
+  }
   function changesTable(plan) {
     var acts = plan.actions.slice().sort(function (a, b) { return ORDER[a.kind] - ORDER[b.kind]; });
     var keep = acts.filter(function (a) { return a.kind === 'keep'; }).length;
@@ -579,7 +621,7 @@
       return '<tr class="' + (a.kind === 'keep' || a.off ? 'dim' : '') + (a.off ? ' off' : '') + '"><td style="white-space:nowrap">' + box + '<span class="tag cs-' + a.kind + '">' + a.kind.toUpperCase() + '</span></td>' +
         '<td><b>' + esc(a.want.name) + '</b> <span class="muted">#' + a.want.id + '</span><div class="muted">' +
         esc(a.want.types.map(function (t) { return shortName(t); }).join(', ')) + '</div></td>' +
-        '<td class="muted">' + esc(a.group) + '</td><td class="n">' + change(a) + '</td></tr>';
+        '<td>' + (a.kind === 'create' ? groupPicker(a, plan) : '<span class="muted">' + esc(a.group) + '</span>') + '</td><td class="n">' + change(a) + '</td></tr>';
     }).join('');
     if (!shown.length) rows = '<tr><td colspan="4" class="muted">No changes.</td></tr>';
     var more = keep ? '<p class="muted"><a href="#" data-toggle="keep">' + (state.showKeep ? 'Hide' : 'Show') + ' ' + keep + ' unchanged</a>' : '<p class="muted">';
@@ -624,6 +666,17 @@
   }
 
   function bindMatchTable() {
+    [].forEach.call(panel.querySelectorAll('select[data-group]'), function (sel) {
+      sel.onchange = function () {
+        var id = sel.getAttribute('data-group'), v = sel.value;
+        if (v === 'new') {
+          var name = prompt('Name of the new group:');
+          if (!name || !name.trim()) { refresh(); return; }
+          state.groupFor[id] = 'new:' + name.trim();
+        } else if (v) state.groupFor[id] = +v;
+        refresh();
+      };
+    });
     [].forEach.call(panel.querySelectorAll('input[data-act]'), function (cb) {
       cb.onchange = function () { var k = cb.getAttribute('data-act'); if (cb.checked) delete state.off[k]; else state.off[k] = true; refresh(); };
     });

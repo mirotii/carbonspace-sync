@@ -52,7 +52,7 @@ const sched = { title: 'Wall Schedule 3', file: 'w.txt', warnings: [], types: [
 let plan = cs.buildPlan([sched], comps, calcSet);
 const kinds = plan.actions.map(a => `${a.kind}:${a.want.id}:${a.group}:${a.newExpr || ''}`);
 // Roof line from an earlier push is not touched by a wall-only push; the old wall line is stale.
-assert.deepStrictEqual(kinds, ['update:80460:Walls Buildup:123', 'create:77303:Facade opaque:6', 'stale:80481:Walls Buildup:']);
+assert.deepStrictEqual(kinds, ['update:80460:Walls Buildup:123', 'create:77303:Walls Buildup:6', 'stale:80481:Walls Buildup:']);
 assert.strictEqual(plan.missing.length, 1);
 plan = cs.buildPlan([sched], comps, calcSet, { prune: true });
 assert.ok(plan.actions.some(a => a.kind === 'delete' && a.line.Id === 102));
@@ -106,6 +106,27 @@ assert.strictEqual(cs.inFolder(flib, folders, null).length, 3);
 const two = { title: 'W', file: 'w', warnings: [], types: [{ name: 'Basic Wall: WT.01a', id: null, area: 1, rowIdx: [] }] };
 assert.strictEqual(cs.resolveIds([two], { library: flib })[0].types[0].id, null, 'ambiguous across folders');
 assert.strictEqual(cs.resolveIds([two], { library: cs.inFolder(flib, folders, 3) })[0].types[0].id, 11);
+// Group choice for new lines.
+{
+  const set = {
+    Calculation: { Id: 1, ProjectId: 1, Name: 'x' },
+    CalculationGroups: [{ Id: 1, Name: 'Skin', ParentId: null, Ordinal: 2 }, { Id: 2, Name: 'Roofs', ParentId: 1, Ordinal: 2 },
+      { Id: 3, Name: 'Facade opaque', ParentId: 1, Ordinal: 0 }, { Id: 4, Name: 'Superstructure', ParentId: null, Ordinal: 0 }],
+    CalculationGroupComponents: [],
+  };
+  const comps2 = { 80470: { Name: 'RT.01', ComponentUnit: 'm2' }, 9: { Name: 'X', ComponentUnit: 'm2' } };
+  const roof = { title: 'Roof Schedule 2', file: 'r', warnings: [], types: [{ name: 'Basic Roof: Roof Model', id: 80470, area: 10 }] };
+  let p = cs.buildPlan([roof], comps2, set);
+  assert.deepStrictEqual([p.actions[0].groupId, p.actions[0].group], [2, 'Skin / Roofs'], 'roof schedule -> existing Roofs group');
+  assert.deepStrictEqual(p.groupOptions.map(o => o.path), ['Superstructure', 'Skin', 'Skin / Facade opaque', 'Skin / Roofs']);
+  p = cs.buildPlan([roof], comps2, set, { groupFor: { 80470: 3 } });
+  assert.strictEqual(p.actions[0].groupId, 3, 'chosen group wins');
+  p = cs.buildPlan([roof], comps2, set, { groupFor: { 80470: 'new:Green roofs' } });
+  assert.deepStrictEqual([p.actions[0].groupId, p.actions[0].newGroup], [undefined, 'Green roofs']);
+  const misc = { title: 'Misc Schedule', file: 'm', warnings: [], types: [{ name: 'Generic: X', id: 9, area: 1 }] };
+  p = cs.buildPlan([misc], comps2, set);
+  assert.deepStrictEqual([p.actions[0].groupId, p.actions[0].newGroup], [undefined, 'Revit import'], 'no match -> proposes a new group');
+}
 console.log('offline tests passed');
 
 // ---------------------------------------------------------------- live
